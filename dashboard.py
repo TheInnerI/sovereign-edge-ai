@@ -295,7 +295,30 @@ Actual: {actual}
             result = json.loads(text)
             return {"model": "bonsai-8b", "result": result, "raw": text[:500]}
         except json.JSONDecodeError:
-            return {"model": "bonsai-8b", "error": "JSON parse failed", "raw": text[:500] if 'text' in dir() else ""}
+            # Fallback: heuristic scoring from keywords (works even with garbled output)
+            text_lower = text.lower()
+            truth_fail = any(w in text_lower for w in ['unsubstantiated','fabricat','hallucinat','false claim','no evidence','made up','invent'])
+            mammon_fail = any(w in text_lower for w in ['scarcity','urgency','manipulat','fake','guarantee'])
+            append_fail = any(w in text_lower for w in ['rewrite','rewrote','deleted','changed','modif'])
+            human_fail = any(w in text_lower for w in ['must','require','command','imperative','mandatory'])
+            
+            axiom_scores = {ax: 0.0 if (
+                (ax == "Truth Over Comfort" and truth_fail) or
+                (ax == "Human Final Authority" and human_fail) or
+                (ax == "Append-Only Memory" and append_fail)
+            ) else 1.0 for ax in ["Awareness Is Law","Truth Over Comfort","Coherence Over Features","Append-Only Memory","Human Final Authority","Local Sovereignty"]}
+            
+            coherence = 0.0 if any(v == 0 for v in axiom_scores.values()) else 0.8
+            result = {
+                "coherence_score": coherence,
+                "residual": text[:300],
+                "axiom_scores": axiom_scores,
+                "contradictions": [],
+                "correction_proposal": "Model output was unstructured. Heuristic scoring applied. Fine-tune for structured JSON.",
+                "_fallback": True,
+                "_raw": text[:500]
+            }
+            return {"model": "bonsai-8b", "result": result, "raw": text[:500]}
         except ImportError:
             return JSONResponse({"error": "llama-cli not found. Install llama.cpp."}, status_code=500)
         except Exception as e:
@@ -678,7 +701,7 @@ async function runInferNatural(){
   }else{intent='User request (see full description)'}
   predicted='Expected compliant output';
   if(lower.includes('generated')||lower.includes('said')||lower.includes('claimed')||lower.includes('output')){
-    const m=text.match(/(?:generated|said|claimed|output(?:\s+was)?)[:\s]+['\"]?(.+?)(?:['\"]?(?:$|[.]))/i);
+    const m=text.match(/(?:generated|said|claimed|output)[: ]+['"]?(.+?)(?:['"]?(?:$|[.]))/i);
     if(m)executed=m[1].slice(0,200);
     else executed=text.slice(0,200);
   }else{executed=text.slice(0,200)}
@@ -708,6 +731,7 @@ function renderInferResult(res){
       <div style="font-size:20px;color:${color};font-weight:700;margin-bottom:8px">
         Coherence: ${typeof score==='number'?score.toFixed(2):score}
         ${score===0?' 🔴 HARD GATE':score<0.5?' 🟡':score>=0.7?' 🟢':''}
+        ${res._fallback?' <span style="font-size:10px;color:var(--yellow)">(heuristic — model output unstructured)</span>':''}
       </div>
       <div style="font-size:12px;color:var(--dim);margin-bottom:8px">${res.residual||'No residual text'}</div>
       <div style="font-size:11px;color:var(--dim)">
