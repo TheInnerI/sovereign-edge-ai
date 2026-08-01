@@ -1,0 +1,16 @@
+# Dependencies
+__pycache__/
+.venv/
+*.pyc
+*.pyo
+
+# Model files (large, download separately)
+models/*.gguf
+
+# Data
+data/*.db
+data/*.pkl
+
+# OS
+.DS_Store
+Thumbs.db
