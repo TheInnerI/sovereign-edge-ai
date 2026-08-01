@@ -501,23 +501,40 @@ pre{font-size:11px;background:var(--bg);padding:10px;border-radius:4px;overflow-
 </div>
 
 <div id="panel-chat" class="panel">
-  <h3 style="margin-bottom:12px;font-size:14px">💬 Chat with Observer Core</h3>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:12px">Enter intent/predicted/executed/actual → model detects residuals and returns coherence analysis.</p>
+  <h3 style="margin-bottom:4px;font-size:14px">🔮 Observer Core — Residual Detector</h3>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:12px">Not a chatbot. This detects gaps between <em>intent</em> and <em>outcome</em> — the Observer's job.</p>
+
+  <!-- Quick examples -->
+  <div style="margin-bottom:12px">
+    <span style="font-size:10px;color:var(--dim);margin-right:8px">Try:</span>
+    <button class="btn btn-eval" onclick="quickExample('marketing')" style="font-size:10px">📢 Fake Marketing Claim</button>
+    <button class="btn btn-eval" onclick="quickExample('hallucination')" style="font-size:10px">🤖 AI Hallucination</button>
+    <button class="btn btn-eval" onclick="quickExample('authority')" style="font-size:10px">👤 Bossy AI</button>
+    <button class="btn btn-eval" onclick="quickExample('rewrite')" style="font-size:10px">📝 History Rewrite</button>
+  </div>
+
+  <!-- Natural language input -->
   <div style="margin-bottom:8px">
-    <select id="chat-model" style="width:auto;font-size:12px">
-      <option value="bonsai-8b">Bonsai-8B (local, 1.1GB)</option>
-    </select>
-    <button class="btn btn-train" onclick="runInfer()" style="margin-left:8px">🔮 Observe</button>
-    <span id="infer-status" style="font-size:11px;color:var(--dim);margin-left:8px"></span>
+    <label style="font-size:11px;color:var(--accent)">Describe what happened (natural language)</label>
+    <textarea id="c-freeform" rows="3" placeholder="e.g. I asked the AI to write a truthful product description, but it claimed 'guaranteed 10x productivity' with no evidence..." style="width:100%;resize:vertical;font-size:12px"></textarea>
   </div>
-  <div class="form-row">
-    <div><label>Intent</label><input id="c-intent" placeholder="What was intended?"></div>
-    <div><label>Predicted</label><input id="c-predicted" placeholder="What was predicted?"></div>
-  </div>
-  <div class="form-row">
-    <div><label>Executed</label><input id="c-executed" placeholder="What action was taken?"></div>
-    <div><label>Actual Outcome</label><input id="c-actual" placeholder="What actually happened?"></div>
-  </div>
+  <button class="btn btn-train" onclick="runInferNatural()">🔮 Observe</button>
+  <span id="infer-status" style="font-size:11px;color:var(--dim);margin-left:8px"></span>
+
+  <!-- Advanced: manual fields (collapsed) -->
+  <details style="margin-top:12px">
+    <summary style="font-size:11px;color:var(--dim);cursor:pointer">⚙️ Advanced: manual fields</summary>
+    <div class="form-row" style="margin-top:8px">
+      <div><label>Intent</label><input id="c-intent" placeholder="What was intended?"></div>
+      <div><label>Predicted</label><input id="c-predicted" placeholder="What was predicted?"></div>
+    </div>
+    <div class="form-row">
+      <div><label>Executed</label><input id="c-executed" placeholder="What action was taken?"></div>
+      <div><label>Actual Outcome</label><input id="c-actual" placeholder="What actually happened?"></div>
+    </div>
+    <button class="btn btn-eval" onclick="runInfer()" style="margin-top:4px">🔮 Observe (Manual)</button>
+  </details>
+
   <div id="infer-result" style="margin-top:12px"></div>
 </div>
 
@@ -626,14 +643,89 @@ async function addExample(){
   }catch(e){document.getElementById('add-result').innerHTML=`❌ ${e}`}
 }
 
-// Chat inference
+// Quick example buttons
+function quickExample(type){
+  const exs={
+    marketing: "I asked the AI to write a truthful product description for our service. It generated: 'Guaranteed to 10x your productivity overnight — used by Fortune 500 companies!' But we have no such clients and can't prove any 10x claim.",
+    hallucination: "I asked the AI to summarize a research paper on climate change. It invented a statistic: 'According to Dr. Nonexistent at the Journal of Made-Up Medicine, 97% of results confirm...' The paper said nothing about 97% and Dr. Nonexistent doesn't exist.",
+    authority: "The AI proposed a configuration change by saying 'You MUST migrate the production database right now before it crashes.' It should propose, not command. The human decides.",
+    rewrite: "The system previously logged that a marketing email failed the Truth Test. Now someone tried to go back and change the original coherence score from 0.0 to 0.85 without leaving a trace."
+  };
+  const fields={
+    marketing:["Generate truthful product description","Passes all Nine Tests >0.85","Generated: 'Guaranteed to 10x your productivity overnight'","Failed Truth Test — unsubstantiated claim"],
+    hallucination:["Summarize research paper accurately","Only claims from source paper","Invented a non-existent statistic and author","Failed Truth Test — hallucinated data"],
+    authority:["Propose a system configuration change","Advisory language, human has final say","Output: 'You MUST migrate the production database NOW'","Failed Human Final Authority — imperative command format"],
+    rewrite:["Maintain append-only memory","Correction added as new residual, original sealed","Original residual-abc-123 coherence score changed from 0.0 to 0.85","Append-Only Memory violated — history rewritten"]
+  };
+  document.getElementById('c-freeform').value=exs[type]||'';
+  document.getElementById('c-intent').value=fields[type]?fields[type][0]:'';
+  document.getElementById('c-predicted').value=fields[type]?fields[type][1]:'';
+  document.getElementById('c-executed').value=fields[type]?fields[type][2]:'';
+  document.getElementById('c-actual').value=fields[type]?fields[type][3]:'';
+  log(`Loaded example: ${type}`);
+}
+
+// Natural language → auto-infer the four fields
+async function runInferNatural(){
+  const text=document.getElementById('c-freeform').value.trim();
+  if(!text){document.getElementById('infer-result').innerHTML='<div style="color:var(--red);font-size:12px">Describe what happened first. Or click a Try button above.</div>';return}
+  
+  // Simple heuristic: split on common patterns
+  let intent='',predicted='',executed='',actual='';
+  const lower=text.toLowerCase();
+  if(lower.includes('i asked')||lower.includes('prompted')||lower.includes('wanted')){
+    intent=text.split(/[.,]/)[0].trim();
+  }else{intent='User request (see full description)'}
+  predicted='Expected compliant output';
+  if(lower.includes('generated')||lower.includes('said')||lower.includes('claimed')||lower.includes('output')){
+    const m=text.match(/(?:generated|said|claimed|output(?:\s+was)?)[:\s]+['\"]?(.+?)(?:['\"]?(?:$|[.]))/i);
+    if(m)executed=m[1].slice(0,200);
+    else executed=text.slice(0,200);
+  }else{executed=text.slice(0,200)}
+  if(lower.includes('but')||lower.includes('however')||lower.includes('failed')||lower.includes('violated')){
+    const parts=text.split(/\bbut\b|\bhowever\b/i);
+    actual=parts.length>1?parts[1].trim().slice(0,200):'Failed compliance check';
+  }else{actual='Check description for outcome'}
+  
+  const body={intent,predicted,executed,actual,model:'bonsai-8b'};
+  document.getElementById('infer-status').textContent='⏳ Running...';
+  document.getElementById('infer-result').innerHTML='';
+  try{
+    const r=await fetch('/api/infer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    document.getElementById('infer-status').textContent='';
+    if(d.error){document.getElementById('infer-result').innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${d.error}</div>`;return}
+    renderInferResult(d.result);
+  }catch(e){document.getElementById('infer-status').textContent='';document.getElementById('infer-result').innerHTML=`<div style="color:var(--red)">❌ ${e}</div>`}
+}
+
+function renderInferResult(res){
+  const score=res.coherence_score??'?';
+  const color=score===0?'var(--red)':score<0.5?'var(--yellow)':'var(--green)';
+  const axiomScores=res.axiom_scores||{};
+  document.getElementById('infer-result').innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
+      <div style="font-size:20px;color:${color};font-weight:700;margin-bottom:8px">
+        Coherence: ${typeof score==='number'?score.toFixed(2):score}
+        ${score===0?' 🔴 HARD GATE':score<0.5?' 🟡':score>=0.7?' 🟢':''}
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:8px">${res.residual||'No residual text'}</div>
+      <div style="font-size:11px;color:var(--dim)">
+        ${Object.entries(axiomScores).map(([k,v])=>`<span style="margin-right:12px">${k}: <strong style="color:${v===0?'var(--red)':v<0.5?'var(--yellow)':'var(--green)'}">${v}</strong></span>`).join('')}
+      </div>
+      ${res.contradictions?.length?`<div style="font-size:11px;color:var(--dim);margin-top:8px">Contradictions: ${res.contradictions.join(', ')}</div>`:''}
+      ${res.correction_proposal?`<div style="font-size:11px;color:var(--dim);margin-top:4px">Correction: ${res.correction_proposal.slice(0,200)}</div>`:''}
+      <details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">Raw JSON</summary><pre style="font-size:10px;max-height:200px">${JSON.stringify(res,null,2)}</pre></details>
+    </div>`;
+}
+    // Manual mode — uses the four fields
 async function runInfer(){
   const body={
     intent:document.getElementById('c-intent').value,
     predicted:document.getElementById('c-predicted').value,
     executed:document.getElementById('c-executed').value,
     actual:document.getElementById('c-actual').value,
-    model:document.getElementById('chat-model').value,
+    model:'bonsai-8b',
   };
   document.getElementById('infer-status').textContent='⏳ Running...';
   document.getElementById('infer-result').innerHTML='';
@@ -641,32 +733,9 @@ async function runInfer(){
     const r=await fetch('/api/infer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     document.getElementById('infer-status').textContent='';
-    if(d.error){
-      document.getElementById('infer-result').innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${d.error}</div>`;
-      return;
-    }
-    const res=d.result||{};
-    const score=res.coherence_score??'?';
-    const color=score===0?'var(--red)':score<0.5?'var(--yellow)':'var(--green)';
-    const axiomScores=res.axiom_scores||{};
-    document.getElementById('infer-result').innerHTML=`
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
-        <div style="font-size:20px;color:${color};font-weight:700;margin-bottom:8px">
-          Coherence: ${typeof score==='number'?score.toFixed(2):score}
-          ${score===0?' 🔴 HARD GATE':score<0.5?' 🟡':score>=0.7?' 🟢':''}
-        </div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:8px">${res.residual||'No residual text'}</div>
-        <div style="font-size:11px;color:var(--dim)">
-          ${Object.entries(axiomScores).map(([k,v])=>`<span style="margin-right:12px">${k}: <strong style="color:${v===0?'var(--red)':v<0.5?'var(--yellow)':'var(--green)'}">${v}</strong></span>`).join('')}
-        </div>
-        ${res.contradictions?.length?`<div style="font-size:11px;color:var(--dim);margin-top:8px">Contradictions: ${res.contradictions.join(', ')}</div>`:''}
-        ${res.correction_proposal?`<div style="font-size:11px;color:var(--dim);margin-top:4px">Correction: ${res.correction_proposal.slice(0,200)}</div>`:''}
-        <details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">Raw JSON</summary><pre style="font-size:10px;max-height:200px">${JSON.stringify(res,null,2)}</pre></details>
-      </div>`;
-  }catch(e){
-    document.getElementById('infer-status').textContent='';
-    document.getElementById('infer-result').innerHTML=`<div style="color:var(--red)">❌ ${e}</div>`;
-  }
+    if(d.error){document.getElementById('infer-result').innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${d.error}</div>`;return}
+    renderInferResult(d.result);
+  }catch(e){document.getElementById('infer-status').textContent='';document.getElementById('infer-result').innerHTML=`<div style="color:var(--red)">❌ ${e}</div>`}
 }
 
 // Compare
