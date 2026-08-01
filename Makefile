@@ -42,7 +42,7 @@ ollama-import: $(MODEL_FILE)
 # ─── Testing ──────────────────────────────────────────────────────────
 
 test-synthetic: $(VENV) train-embedder
-	@echo "🧪 Running synthetic tests (no model needed)..."
+	@echo "🧪 Running synthetic tests..."
 	$(PYTHON) tests/test_synthetic.py
 
 test-model: $(VENV) $(MODEL_FILE)
