@@ -220,7 +220,10 @@ async def api_train(model_key: str):
     try:
         import torch
         if not torch.cuda.is_available():
-            return JSONResponse({"error": "no_gpu", "message": "CUDA GPU required for training. Free option: https://colab.research.google.com/"}, status_code=400)
+            return JSONResponse({"error": "no_gpu",
+                "message": "CUDA GPU required for training.",
+                "colab_url": "https://colab.research.google.com/github/TheInnerI/sovereign-edge-ai/blob/master/notebooks/train_observer_colab.ipynb",
+                "colab_text": "🚀 Open in Colab (Free T4 GPU)"}, status_code=400)
     except ImportError:
         return JSONResponse({"error": "no_torch", "message": "PyTorch not installed"}, status_code=400)
     with job_lock:
@@ -505,7 +508,7 @@ function renderModels(data){
   }).join('');
 }
 
-async function train(key){log(`Training ${key}...`);try{const r=await fetch(`/api/train/${key}`,{method:'POST'});const d=await r.json();log(d.error?`❌ ${d.error}`:d.status||'started')}catch(e){log(`Error: ${e}`)}refresh()}
+async function train(key){log(`Training ${key}...`);try{const r=await fetch(`/api/train/${key}`,{method:'POST'});const d=await r.json();if(d.error){log(`❌ ${d.error}: ${d.message||''}`);if(d.colab_url){log(`🔗 ${d.colab_text}: ${d.colab_url}`)}}else{log(d.status||'started')}}catch(e){log(`Error: ${e}`)}refresh()}
 async function evaluate(key){log(`Eval ${key}...`);try{const r=await fetch(`/api/eval/${key}`,{method:'POST'});const d=await r.json();log(`Eval ${key}: ${d.success?'✅':'❌'}`);if(d.output)log(d.output.slice(-400))}catch(e){log(`Error: ${e}`)}}
 async function exportModel(key){log(`Export ${key}...`);try{const r=await fetch(`/api/export/${key}`,{method:'POST'});const d=await r.json();log(`Export ${key}: ${d.success?'✅':'❌'}`)}catch(e){log(`Error: ${e}`)}}
 
