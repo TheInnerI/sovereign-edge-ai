@@ -254,6 +254,59 @@ async def api_eval(model_key: str):
     return {"model": model_key, "output": r.stdout[-2000:], "success": r.returncode == 0}
 
 
+# ─── API: Inference (Chat) ────────────────────────────────────────────────
+
+@app.post("/api/infer")
+async def api_infer(request: Request):
+    """Run inference — detects residuals using Bonsai-8B or trained model."""
+    try:
+        body = await request.json()
+        intent = body.get("intent", "").strip()
+        predicted = body.get("predicted", "").strip()
+        executed = body.get("executed", "").strip()
+        actual = body.get("actual", "").strip()
+        model_key = body.get("model", "bonsai-8b").strip()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    if not all([intent, predicted, executed, actual]):
+        return JSONResponse({"error": "All four fields required"}, status_code=400)
+
+    # Bonsai-8B local inference via llama-cpp-python
+    bonsai_path = Path("models/Bonsai-8B-Q1_0.gguf")
+    if model_key == "bonsai-8b" and bonsai_path.exists():
+        try:
+            from llama_cpp import Llama
+            llm = Llama(model_path=str(bonsai_path), n_ctx=2048, n_threads=4, verbose=False)
+            prompt = f"""<|system|>
+You are the Sovereign Edge Observer Core. Detect residuals, score coherence against six axioms, emit JSON.
+<|user|>
+Intent: {intent}
+Predicted: {predicted}
+Executed: {executed}
+Actual: {actual}
+<|assistant|>
+"""
+            output = llm(prompt, max_tokens=512, temperature=0.1, top_p=0.9, repeat_penalty=1.1)
+            text = output["choices"][0]["text"].strip()
+            start = text.find("{"); end = text.rfind("}")
+            if start >= 0 and end > start:
+                text = text[start:end + 1]
+            result = json.loads(text)
+            return {"model": "bonsai-8b", "result": result, "raw": text[:500]}
+        except json.JSONDecodeError:
+            return {"model": "bonsai-8b", "error": "JSON parse failed", "raw": text[:500] if 'text' in dir() else ""}
+        except ImportError:
+            return JSONResponse({"error": "llama-cli not found. Install llama.cpp."}, status_code=500)
+        except Exception as e:
+            return JSONResponse({"error": str(e)[:300]}, status_code=500)
+
+    return JSONResponse({
+        "error": "no_model",
+        "available": ["bonsai-8b"] + [k for k in MODEL_CATALOG if (OUTPUT_DIR / f"observer-lora-{k}").exists()]
+    }, status_code=400)
+
+
 @app.post("/api/export/{model_key}")
 async def api_export(model_key: str):
     if model_key not in MODEL_CATALOG:
@@ -390,6 +443,7 @@ pre{font-size:11px;background:var(--bg);padding:10px;border-radius:4px;overflow-
   <div class="tab active" data-panel="models">🧠 Models</div>
   <div class="tab" data-panel="data">📊 Data Browser</div>
   <div class="tab" data-panel="add-data">➕ Add Data</div>
+  <div class="tab" data-panel="chat">💬 Chat</div>
   <div class="tab" data-panel="compare">⚖️ Compare</div>
   <div class="tab" data-panel="cards">📋 Model Cards</div>
 </div>
@@ -444,6 +498,27 @@ pre{font-size:11px;background:var(--bg);padding:10px;border-radius:4px;overflow-
   </div>
   <button class="btn btn-train" onclick="addExample()">➕ Add to Training Set</button>
   <div id="add-result" style="margin-top:8px;font-size:12px"></div>
+</div>
+
+<div id="panel-chat" class="panel">
+  <h3 style="margin-bottom:12px;font-size:14px">💬 Chat with Observer Core</h3>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:12px">Enter intent/predicted/executed/actual → model detects residuals and returns coherence analysis.</p>
+  <div style="margin-bottom:8px">
+    <select id="chat-model" style="width:auto;font-size:12px">
+      <option value="bonsai-8b">Bonsai-8B (local, 1.1GB)</option>
+    </select>
+    <button class="btn btn-train" onclick="runInfer()" style="margin-left:8px">🔮 Observe</button>
+    <span id="infer-status" style="font-size:11px;color:var(--dim);margin-left:8px"></span>
+  </div>
+  <div class="form-row">
+    <div><label>Intent</label><input id="c-intent" placeholder="What was intended?"></div>
+    <div><label>Predicted</label><input id="c-predicted" placeholder="What was predicted?"></div>
+  </div>
+  <div class="form-row">
+    <div><label>Executed</label><input id="c-executed" placeholder="What action was taken?"></div>
+    <div><label>Actual Outcome</label><input id="c-actual" placeholder="What actually happened?"></div>
+  </div>
+  <div id="infer-result" style="margin-top:12px"></div>
 </div>
 
 <div id="panel-compare" class="panel">
@@ -549,6 +624,49 @@ async function addExample(){
     const d=await r.json();
     document.getElementById('add-result').innerHTML=d.error?`❌ ${d.error}`:`✅ Added! ID: ${d.residual_id?.slice(0,8)}... → ${d.file}`;
   }catch(e){document.getElementById('add-result').innerHTML=`❌ ${e}`}
+}
+
+// Chat inference
+async function runInfer(){
+  const body={
+    intent:document.getElementById('c-intent').value,
+    predicted:document.getElementById('c-predicted').value,
+    executed:document.getElementById('c-executed').value,
+    actual:document.getElementById('c-actual').value,
+    model:document.getElementById('chat-model').value,
+  };
+  document.getElementById('infer-status').textContent='⏳ Running...';
+  document.getElementById('infer-result').innerHTML='';
+  try{
+    const r=await fetch('/api/infer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    document.getElementById('infer-status').textContent='';
+    if(d.error){
+      document.getElementById('infer-result').innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${d.error}</div>`;
+      return;
+    }
+    const res=d.result||{};
+    const score=res.coherence_score??'?';
+    const color=score===0?'var(--red)':score<0.5?'var(--yellow)':'var(--green)';
+    const axiomScores=res.axiom_scores||{};
+    document.getElementById('infer-result').innerHTML=`
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div style="font-size:20px;color:${color};font-weight:700;margin-bottom:8px">
+          Coherence: ${typeof score==='number'?score.toFixed(2):score}
+          ${score===0?' 🔴 HARD GATE':score<0.5?' 🟡':score>=0.7?' 🟢':''}
+        </div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:8px">${res.residual||'No residual text'}</div>
+        <div style="font-size:11px;color:var(--dim)">
+          ${Object.entries(axiomScores).map(([k,v])=>`<span style="margin-right:12px">${k}: <strong style="color:${v===0?'var(--red)':v<0.5?'var(--yellow)':'var(--green)'}">${v}</strong></span>`).join('')}
+        </div>
+        ${res.contradictions?.length?`<div style="font-size:11px;color:var(--dim);margin-top:8px">Contradictions: ${res.contradictions.join(', ')}</div>`:''}
+        ${res.correction_proposal?`<div style="font-size:11px;color:var(--dim);margin-top:4px">Correction: ${res.correction_proposal.slice(0,200)}</div>`:''}
+        <details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">Raw JSON</summary><pre style="font-size:10px;max-height:200px">${JSON.stringify(res,null,2)}</pre></details>
+      </div>`;
+  }catch(e){
+    document.getElementById('infer-status').textContent='';
+    document.getElementById('infer-result').innerHTML=`<div style="color:var(--red)">❌ ${e}</div>`;
+  }
 }
 
 // Compare

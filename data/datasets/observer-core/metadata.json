@@ -1,0 +1,62 @@
+{
+  "dataset_name": "observer-core-synthetic-v1",
+  "created": "2026-08-01T04:59:31Z",
+  "total_examples": 11000,
+  "data_types": {
+    "residuals": 5000,
+    "coherence_judgments": 2000,
+    "contradiction_pairs": 1000,
+    "observer_sequences": 200,
+    "preference_pairs": 1000,
+    "structured_records": 1000
+  },
+  "schema_version": "1.0",
+  "six_axioms": [
+    "Awareness Is Law",
+    "Truth Over Comfort",
+    "Coherence Over Features",
+    "Append-Only Memory",
+    "Human Final Authority",
+    "Local Sovereignty"
+  ],
+  "seven_constraints": [
+    "Life",
+    "Agency",
+    "Dignity",
+    "Truth",
+    "Coherence",
+    "Boundary",
+    "Receipt"
+  ],
+  "distribution": {
+    "avg_coherence": 0.411,
+    "hard_gate_pct": 40.1,
+    "domains": {
+      "coherence_drift": 726,
+      "human_authority": 714,
+      "code_execution": 674,
+      "marketing_truth": 732,
+      "ai_hallucination": 750,
+      "boundary_scope": 683,
+      "append_only": 721
+    },
+    "axioms_violated": {
+      "none": 1508,
+      "Awareness Is Law": 611,
+      "Local Sovereignty": 590,
+      "Coherence Over Features": 559,
+      "Human Final Authority": 567,
+      "Truth Over Comfort": 604,
+      "Append-Only Memory": 561
+    }
+  },
+  "generator_stats": {
+    "residuals_generated": 5000,
+    "coherence_judgments": 2000,
+    "contradiction_pairs": 1000,
+    "observer_sequences": 200,
+    "sequence_turns": 1000,
+    "preference_pairs": 1000,
+    "structured_records": 1000
+  }
+}

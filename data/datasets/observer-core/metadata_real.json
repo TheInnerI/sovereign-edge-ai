@@ -1,0 +1,14 @@
+{
+  "dataset_name": "observer-core-real-v1",
+  "created": "2026-08-01T05:01:12Z",
+  "total_examples": 20,
+  "sources": {
+    "nanbeige4-3b-blind-spots": 15,
+    "sensor-failure-examples": 5
+  },
+  "distribution": {
+    "avg_coherence": 0.546,
+    "hard_gate_pct": 10.0
+  },
+  "licenses": "MIT (Nanbeige), CC-BY-4.0 derivative (Sensor Failure)"
+}
