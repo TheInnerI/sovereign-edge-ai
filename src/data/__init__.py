@@ -1,0 +1,1 @@
+"""Data pipeline — synthetic dataset generation, quality filters, export."""

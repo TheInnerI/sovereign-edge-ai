@@ -39,6 +39,22 @@ ollama-import: $(MODEL_FILE)
 	cd $(CURDIR) && ollama create sovereign-observer -f Modelfile
 	@echo "✅ Model imported. Run: ollama run sovereign-observer"
 
+# ─── Data Pipeline ──────────────────────────────────────────────────────
+
+data-quick: $(VENV)
+	@echo "🔮 Quick data pipeline (1k examples)..."
+	$(PYTHON) run_data_pipeline.py --quick
+
+data-full: $(VENV)
+	@echo "🔮 Full data pipeline (11k examples)..."
+	$(PYTHON) run_data_pipeline.py --full
+
+data-stats: $(VENV)
+	$(PYTHON) run_data_pipeline.py --stats
+
+data-validate: $(VENV)
+	$(PYTHON) run_data_pipeline.py --validate
+
 # ─── Testing ──────────────────────────────────────────────────────────
 
 test-synthetic: $(VENV) train-embedder
